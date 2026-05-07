@@ -1,4 +1,4 @@
-# 灏嗘湰 fork 鐨勯粯璁ゅ垎鏀笌涓婃父浠撳簱鍚屾锛堟瘡灏忔椂 UTC 鏁寸偣 + 鍙墜鍔ㄨ繍琛岋級
+# 将本 fork 的默认分支与上游仓库同步（每小时 UTC 整点 + 可手动运行）
 name: Sync fork with upstream
 
 on:
@@ -17,13 +17,13 @@ jobs:
       contents: write
 
     steps:
-      - name: 妫€鍑哄綋鍓?fork锛堝畬鏁村巻鍙诧紝渚夸簬鍚堝苟锛?
-        uses: actions/checkout@v4
+      - name: 检出当前 fork（完整历史，便于合并）
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 鍚堝苟涓婃父榛樿鍒嗘敮鍒版湰浠撳簱榛樿鍒嗘敮
+      - name: 合并上游默认分支到本仓库默认分支
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -45,7 +45,7 @@ jobs:
           git pull origin "$FORK_DEFAULT" --ff-only || true
 
           git merge "upstream/${UPSTREAM_DEFAULT}" -m "chore: merge upstream ${UPSTREAM_DEFAULT} into ${FORK_DEFAULT} [skip ci]" || {
-            echo "鍚堝苟澶辫触锛氬彲鑳芥湁鍐茬獊锛岃鍦ㄦ湰鍦拌В鍐冲悗鎺ㄩ€併€?
+            echo "合并失败：可能有冲突，请在本地解决后推送。"
             exit 1
           }
           git push origin "$FORK_DEFAULT"
