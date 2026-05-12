@@ -1,14 +1,9 @@
-# 将本 fork 的默认分支与上游仓库同步（每小时 UTC 整点 + 可手动运行）
-name: Sync fork with upstream
+﻿name: Sync fork with upstream
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 1 * * *"
   workflow_dispatch:
-
-env:
-  UPSTREAM_OWNER: obra
-  UPSTREAM_REPO: superpowers
 
 jobs:
   sync:
@@ -23,29 +18,40 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 合并上游默认分支到本仓库默认分支
+      - name: 合并上游默认分支到本仓库默认分支（保留本仓库 workflows）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
+          set -euo pipefail
           git config user.name "daxiong"
           git config user.email "15732029980@163.com"
 
-          UPSTREAM_DEFAULT="$(gh api "repos/${UPSTREAM_OWNER}/${UPSTREAM_REPO}" --jq .default_branch)"
+          PARENT_OWNER="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.parent.owner.login')"
+          PARENT_REPO="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.parent.name')"
+          UPSTREAM_DEFAULT="$(gh api "repos/${PARENT_OWNER}/${PARENT_REPO}" --jq .default_branch)"
           FORK_DEFAULT="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
 
           if git remote get-url upstream >/dev/null 2>&1; then
-            git remote set-url upstream "https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}.git"
+            git remote set-url upstream "https://github.com/${PARENT_OWNER}/${PARENT_REPO}.git"
           else
-            git remote add upstream "https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}.git"
+            git remote add upstream "https://github.com/${PARENT_OWNER}/${PARENT_REPO}.git"
           fi
           git fetch upstream --prune
 
           git checkout "$FORK_DEFAULT"
           git pull origin "$FORK_DEFAULT" --ff-only || true
 
-          git merge "upstream/${UPSTREAM_DEFAULT}" -m "chore: merge upstream ${UPSTREAM_DEFAULT} into ${FORK_DEFAULT} [skip ci]" || {
+          git merge --no-ff --no-edit "upstream/${UPSTREAM_DEFAULT}" || {
             echo "合并失败：可能有冲突，请在本地解决后推送。"
             exit 1
           }
+
+          # 防止 push 被 workflow 权限拒绝：不把 upstream 的 workflow 文件变更推到 fork
+          if git diff --name-only HEAD^1 HEAD | grep -q '^\.github/workflows/'; then
+            git restore --source=HEAD^1 --staged --worktree .github/workflows
+            if ! git diff --cached --quiet || ! git diff --quiet; then
+              git commit --amend --no-edit
+            fi
+          fi
+
           git push origin "$FORK_DEFAULT"
